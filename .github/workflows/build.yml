@@ -9,7 +9,7 @@ on:
     branches:
       - develop
   schedule:
-    - cron: '30 11 * * 3,5'   
+    - cron: '30 11 * * 3,5'
 
 jobs:
   build:
@@ -19,16 +19,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.x'
+      - name: Check .NET Version
+        run: dotnet --version
 
       - name: Restore Dependencies
         run: dotnet restore
 
       - name: Build Solution
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build --configuration Release
 
       - name: Run Unit Tests
         run: dotnet test --logger "trx" --results-directory TestResults
@@ -45,5 +43,5 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: calculator-build-${{ github.sha }}
+          name: calculator-build-${{ github.ref_name }}-${{ github.sha }}
           path: output/
