@@ -29,7 +29,7 @@ jobs:
         run: dotnet restore
 
       - name: Install SonarScanner
-        run: dotnet tool install --global dotnet-sonarscanner
+        run: dotnet tool update --global dotnet-sonarscanner
 
       - name: Add .NET tools to PATH
         run: echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
@@ -90,6 +90,23 @@ jobs:
         with:
           name: build-${{ env.BUILD_VERSION }}
           path: output/
+
+      - name: Upload Artifact to Artifactory
+        if: steps.test_step.outcome == 'success'
+        run: |
+          $artifactPath = "output"
+          $zipName = "build-${{ env.BUILD_VERSION }}.zip"
+
+          Compress-Archive -Path "$artifactPath\*" -DestinationPath $zipName
+
+          curl -u "$env:ART_USER`:$env:ART_PASS" `
+            -T $zipName `
+            "$env:ART_URL/calculator-builds/$zipName"
+        shell: powershell
+        env:
+          ART_URL: ${{ secrets.ARTIFACTORY_URL }}
+          ART_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ART_PASS: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
       - name: Send Email on Failure
         if: failure()
