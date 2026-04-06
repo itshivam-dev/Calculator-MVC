@@ -22,14 +22,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.x'
-          install-dir: ${{ runner.temp }}/dotnet
-
-      - name: Add .NET to PATH
-        run: echo "${{ runner.temp }}/dotnet" >> $GITHUB_PATH
+      - name: Check .NET Version
+        run: dotnet --version
 
       - name: Restore Dependencies
         run: dotnet restore
