@@ -28,20 +28,25 @@ jobs:
       - name: Restore Dependencies
         run: dotnet restore
 
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Add .NET tools to PATH
+        run: echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+        shell: powershell
+
+      - name: SonarCloud Begin
+        run: |
+          dotnet sonarscanner begin `
+            /k:"itshivam-dev_Calculator-MVC" `
+            /o:"itshivam-dev" `
+            /d:sonar.login="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.host.url="https://sonarcloud.io"
+        shell: powershell
+
       - name: Build Solution
         run: dotnet build --no-restore --configuration Release
 
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        with:
-          args: >
-            -Dsonar.projectKey=itshivam-dev_Calculator-MVC
-            -Dsonar.organization=itshivam-dev
-            -Dsonar.host.url=https://sonarcloud.io
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          
       - name: Run Unit Tests
         id: test_step
         continue-on-error: true
@@ -51,7 +56,9 @@ jobs:
           --collect:"XPlat Code Coverage" `
           --results-directory TestResults
 
-          
+      - name: SonarCloud End
+        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+        shell: powershell
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -95,7 +102,7 @@ jobs:
             Branch: ${{ github.ref_name }}
             Commit: ${{ github.sha }}
 
-            Check logs here:
+            Check logs:
             https://github.com/${{ github.repository }}/actions
           to: ${{ secrets.EMAIL_TO }}
           from: GitHub Actions
