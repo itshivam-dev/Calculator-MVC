@@ -99,7 +99,7 @@ jobs:
 
           Compress-Archive -Path "$artifactPath\*" -DestinationPath $zipName
 
-          curl -u "$env:ART_USER`:$env:ART_PASS" `
+          curl.exe -u "$env:ART_USER`:$env:ART_PASS" `
             -T $zipName `
             "$env:ART_URL/calculator-builds/$zipName"
         shell: powershell
