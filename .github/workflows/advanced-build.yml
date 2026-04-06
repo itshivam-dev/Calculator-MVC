@@ -40,9 +40,11 @@ jobs:
           dotnet sonarscanner begin `
             /k:"itshivam-dev_Calculator-MVC" `
             /o:"itshivam-dev" `
-            /d:sonar.login="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.login="$SONAR_TOKEN" `
             /d:sonar.host.url="https://sonarcloud.io"
         shell: powershell
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Build Solution
         run: dotnet build --no-restore --configuration Release
@@ -57,8 +59,10 @@ jobs:
           --results-directory TestResults
 
       - name: SonarCloud End
-        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+        run: dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
         shell: powershell
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
