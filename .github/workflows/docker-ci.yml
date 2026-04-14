@@ -140,18 +140,26 @@ jobs:
             "${{ secrets.ARTIFACTORY_URL }}/calculator-builds/$zipName"
 
 
+  docker:
+    needs: build-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: output/
+
       - name: Build Docker Image
-        if: steps.test_step.outcome == 'success'
-        run: docker build -t calculator-app:${{ env.BUILD_VERSION }} .
+        run: docker build -t calculator-app:${{ needs.build-test.outputs.build_version }} .
 
       - name: Run Docker Container
-        if: steps.test_step.outcome == 'success'
         run: |
           docker rm -f calculator-container || true
-          docker run -d -p 8080:80 --name calculator-container calculator-app:${{ env.BUILD_VERSION }}
+          docker run -d -p 8080:80 --name calculator-container calculator-app:${{ needs.build-test.outputs.build_version }}
 
       - name: Verify Running Container
-        if: steps.test_step.outcome == 'success'
         run: docker ps
 
 
