@@ -1,4 +1,4 @@
-name: Advanced CI Pipeline
+name: Docker CI Pipeline
 
 on:
   push:
@@ -18,6 +18,9 @@ jobs:
   build-test:
     runs-on: windows-latest
 
+    outputs:
+      build_version: ${{ env.BUILD_VERSION }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
       - name: Install .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '8.0.x'
 
       - name: Check .NET Version
         run: dotnet --version
@@ -36,24 +39,11 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool update --global dotnet-sonarscanner
 
-      # PATH SETUP (OS BASED)
-
-      - name: Add .NET tools to PATH (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Add .NET tools to PATH
         shell: pwsh
-        run: |
-          echo "$HOME/.dotnet/tools" >> $env:GITHUB_PATH
+        run: echo "$HOME/.dotnet/tools" >> $env:GITHUB_PATH
 
-      - name: Add .NET tools to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
-
-
-
-      - name: SonarCloud Begin (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: SonarCloud Begin
         shell: pwsh
         run: |
           dotnet sonarscanner begin `
@@ -61,18 +51,6 @@ jobs:
             /o:"itshivam-dev" `
             /d:sonar.login="${{ secrets.SONAR_TOKEN }}" `
             /d:sonar.host.url="https://sonarcloud.io"
-
-      - name: SonarCloud Begin (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          dotnet sonarscanner begin `
-            /k:"itshivam-dev_Calculator-MVC" `
-            /o:"itshivam-dev" `
-            /d:sonar.login="$env:SONAR_TOKEN" `
-            /d:sonar.host.url="https://sonarcloud.io"
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Build Solution
         run: dotnet build --no-restore --configuration Release
@@ -87,18 +65,9 @@ jobs:
             --collect:"XPlat Code Coverage" `
             --results-directory TestResults
 
-
-      - name: SonarCloud End (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: SonarCloud End
         shell: pwsh
         run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
-
-      - name: SonarCloud End (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: dotnet sonarscanner end /d:sonar.login="$env:SONAR_TOKEN"
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -120,13 +89,16 @@ jobs:
         if: steps.test_step.outcome == 'success'
         run: dotnet publish CalculatorAppMVC/CalculatorAppMVC.csproj -c Release -o output
 
+      - name: Debug Output Folder
+        if: steps.test_step.outcome == 'success'
+        run: dir output
+
       - name: Upload Build Artifact
         if: steps.test_step.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ env.BUILD_VERSION }}
+          name: build-output
           path: output/
-
 
       - name: Upload Artifact to Artifactory
         if: steps.test_step.outcome == 'success'
@@ -139,12 +111,15 @@ jobs:
             -T $zipName `
             "${{ secrets.ARTIFACTORY_URL }}/calculator-builds/$zipName"
 
-
   docker:
     needs: build-test
     runs-on: ubuntu-latest
+    if: needs.build-test.result == 'success'
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
         with:
@@ -161,7 +136,6 @@ jobs:
 
       - name: Verify Running Container
         run: docker ps
-
 
       - name: Send Email on Failure
         if: failure()
