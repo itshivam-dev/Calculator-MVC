@@ -1,0 +1,176 @@
+name: Advanced CI Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+      - feature-*
+  pull_request:
+    branches:
+      - develop
+  schedule:
+    - cron: '30 11 * * 3,5'
+
+env:
+  BUILD_VERSION: ${{ github.ref_name }}-${{ github.sha }}
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Check .NET Version
+        run: dotnet --version
+
+      - name: Restore Dependencies
+        run: dotnet restore CalculatorAppMVC.sln
+
+      - name: Install SonarScanner
+        run: dotnet tool update --global dotnet-sonarscanner
+
+      # PATH SETUP (OS BASED)
+
+      - name: Add .NET tools to PATH (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: pwsh
+        run: |
+          echo "$HOME/.dotnet/tools" >> $env:GITHUB_PATH
+
+      - name: Add .NET tools to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+
+
+
+      - name: SonarCloud Begin (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: pwsh
+        run: |
+          dotnet sonarscanner begin `
+            /k:"itshivam-dev_Calculator-MVC" `
+            /o:"itshivam-dev" `
+            /d:sonar.login="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.host.url="https://sonarcloud.io"
+
+      - name: SonarCloud Begin (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          dotnet sonarscanner begin `
+            /k:"itshivam-dev_Calculator-MVC" `
+            /o:"itshivam-dev" `
+            /d:sonar.login="$env:SONAR_TOKEN" `
+            /d:sonar.host.url="https://sonarcloud.io"
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Build Solution
+        run: dotnet build CalculatorAppMVC.sln --no-restore --configuration Release
+
+      - name: Run Unit Tests
+        id: test_step
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          dotnet test `
+            --logger "trx" `
+            --collect:"XPlat Code Coverage" `
+            --results-directory TestResults
+
+
+      - name: SonarCloud End (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: pwsh
+        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+
+      - name: SonarCloud End (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: dotnet sonarscanner end /d:sonar.login="$env:SONAR_TOKEN"
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ env.BUILD_VERSION }}
+          path: TestResults
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ env.BUILD_VERSION }}
+          path: '**/coverage.cobertura.xml'
+
+      - name: Check Test Status
+        if: steps.test_step.outcome == 'failure'
+        run: echo "Tests failed but build continued"
+
+      - name: Publish MVC App
+        if: steps.test_step.outcome == 'success'
+        run: dotnet publish CalculatorAppMVC/CalculatorAppMVC.csproj -c Release -o output
+
+      - name: Upload Build Artifact
+        if: steps.test_step.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ env.BUILD_VERSION }}
+          path: output/
+
+
+      - name: Upload Artifact to Artifactory
+        if: steps.test_step.outcome == 'success'
+        shell: pwsh
+        run: |
+          $zipName = "build-${{ env.BUILD_VERSION }}.zip"
+          Compress-Archive -Path "output/*" -DestinationPath $zipName
+
+          curl -u "${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_PASSWORD }}" `
+            -T $zipName `
+            "${{ secrets.ARTIFACTORY_URL }}/calculator-builds/$zipName"
+
+
+      - name: Build Docker Image
+        if: steps.test_step.outcome == 'success'
+        run: docker build -t calculator-app:${{ env.BUILD_VERSION }} .
+
+      - name: Run Docker Container
+        if: steps.test_step.outcome == 'success'
+        run: |
+          docker rm -f calculator-container || true
+          docker run -d -p 8080:80 --name calculator-container calculator-app:${{ env.BUILD_VERSION }}
+
+      - name: Verify Running Container
+        if: steps.test_step.outcome == 'success'
+        run: docker ps
+
+
+      - name: Send Email on Failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.zoho.in
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Build Failed - ${{ github.repository }}"
+          body: |
+            Build failed for:
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+
+            Check logs:
+            https://github.com/${{ github.repository }}/actions
+          to: ${{ secrets.EMAIL_TO }}
+          from: GitHub Actions
