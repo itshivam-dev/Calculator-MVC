@@ -108,6 +108,22 @@ jobs:
           ART_USER: ${{ secrets.ARTIFACTORY_USER }}
           ART_PASS: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
+
+      - name: Build Docker Image
+        if: steps.test_step.outcome == 'success'
+        run: |
+          docker build -t calculator-app:${{ env.BUILD_VERSION }} .
+
+      - name: Run Docker Container
+        if: steps.test_step.outcome == 'success'
+        run: |
+          docker rm -f calculator-container || true
+          docker run -d -p 8080:80 --name calculator-container calculator-app:${{ env.BUILD_VERSION }}
+
+      - name: Verify Running Container
+        if: steps.test_step.outcome == 'success'
+        run: docker ps
+
       - name: Send Email on Failure
         if: failure()
         uses: dawidd6/action-send-mail@v3
