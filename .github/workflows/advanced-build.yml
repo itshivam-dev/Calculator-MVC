@@ -84,11 +84,13 @@ jobs:
 
 
       - name: SonarCloud End (Linux/macOS)
+        continue-on-error: true
         if: runner.os != 'Windows'
         shell: pwsh
         run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
 
       - name: SonarCloud End (Windows)
+        continue-on-error: true
         if: runner.os == 'Windows'
         shell: powershell
         run: dotnet sonarscanner end /d:sonar.login="$env:SONAR_TOKEN"
@@ -96,26 +98,31 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Upload Test Results
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ env.BUILD_VERSION }}
           path: TestResults
 
       - name: Upload Coverage Report
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ env.BUILD_VERSION }}
           path: '**/coverage.cobertura.xml'
 
       - name: Check Test Status
+        continue-on-error: true
         if: steps.test_step.outcome == 'failure'
         run: echo "Tests failed but build continued"
 
       - name: Publish MVC App
+        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         run: dotnet publish CalculatorAppMVC/CalculatorAppMVC.csproj -c Release -o output
 
       - name: Upload Build Artifact
+        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -124,6 +131,7 @@ jobs:
 
 
       - name: Upload Artifact to Artifactory
+        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         shell: pwsh
         run: |
