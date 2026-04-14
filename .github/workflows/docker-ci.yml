@@ -16,11 +16,16 @@ env:
 
 jobs:
   build-test:
-    runs-on: self-hosted
+    runs-on: windows-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Check .NET Version
         run: dotnet --version
@@ -84,13 +89,11 @@ jobs:
 
 
       - name: SonarCloud End (Linux/macOS)
-        continue-on-error: true
         if: runner.os != 'Windows'
         shell: pwsh
         run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
 
       - name: SonarCloud End (Windows)
-        continue-on-error: true
         if: runner.os == 'Windows'
         shell: powershell
         run: dotnet sonarscanner end /d:sonar.login="$env:SONAR_TOKEN"
@@ -98,31 +101,26 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Upload Test Results
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ env.BUILD_VERSION }}
           path: TestResults
 
       - name: Upload Coverage Report
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ env.BUILD_VERSION }}
           path: '**/coverage.cobertura.xml'
 
       - name: Check Test Status
-        continue-on-error: true
         if: steps.test_step.outcome == 'failure'
         run: echo "Tests failed but build continued"
 
       - name: Publish MVC App
-        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         run: dotnet publish CalculatorAppMVC/CalculatorAppMVC.csproj -c Release -o output
 
       - name: Upload Build Artifact
-        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -131,7 +129,6 @@ jobs:
 
 
       - name: Upload Artifact to Artifactory
-        continue-on-error: true
         if: steps.test_step.outcome == 'success'
         shell: pwsh
         run: |
@@ -141,6 +138,21 @@ jobs:
           curl -u "${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_PASSWORD }}" `
             -T $zipName `
             "${{ secrets.ARTIFACTORY_URL }}/calculator-builds/$zipName"
+
+
+      - name: Build Docker Image
+        if: steps.test_step.outcome == 'success'
+        run: docker build -t calculator-app:${{ env.BUILD_VERSION }} .
+
+      - name: Run Docker Container
+        if: steps.test_step.outcome == 'success'
+        run: |
+          docker rm -f calculator-container || true
+          docker run -d -p 8080:80 --name calculator-container calculator-app:${{ env.BUILD_VERSION }}
+
+      - name: Verify Running Container
+        if: steps.test_step.outcome == 'success'
+        run: docker ps
 
 
       - name: Send Email on Failure
