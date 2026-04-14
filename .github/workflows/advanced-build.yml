@@ -26,7 +26,7 @@ jobs:
         run: dotnet --version
 
       - name: Restore Dependencies
-        run: dotnet restore CalculatorAppMVC.sln
+        run: dotnet restore
 
       - name: Install SonarScanner
         run: dotnet tool update --global dotnet-sonarscanner
