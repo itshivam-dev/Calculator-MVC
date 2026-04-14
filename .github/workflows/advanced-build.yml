@@ -70,7 +70,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Build Solution
-        run: dotnet build CalculatorAppMVC.sln --no-restore --configuration Release
+        run: dotnet build --no-restore --configuration Release
 
       - name: Run Unit Tests
         id: test_step
